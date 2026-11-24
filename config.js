@@ -12,5 +12,5 @@
    ========================================================= */
 window.PHOTOBOOTH_CONFIG = {
   BOOTH_PASSWORD: "0000",   // 부스 모드 선생님 비밀번호
-  APPS_SCRIPT_URL: ""       // (선택) 휴대폰 모드용 주소. 비워 두면 부스 모드
+  APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzbnWQLcQgz70-GinltS4jFjIwl3WERGzgsMEjJJkK6bd3fxpW5yE9812jCk5yHotdrNA/exec"       // (선택) 휴대폰 모드용 주소. 비워 두면 부스 모드
 };
