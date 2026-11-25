@@ -88,11 +88,19 @@
       <div class="gate">
         <form class="card gate-card" id="tLoginForm" autocomplete="off">
           <p class="eyebrow">TEACHER MODE</p>
-          <h1>선생님 모드</h1>
+          <h1 id="tFormTitle">선생님 모드</h1>
           <p id="tLoginHint">비밀번호를 입력하세요.</p>
-          <input class="text-input" id="tPw" type="password" placeholder="••••" aria-label="선생님 비밀번호" />
+          <div class="field" id="tRoomWrap" hidden><label for="tRoom">방 이름</label>
+            <input class="text-input plain" id="tRoom" type="text" maxlength="30" placeholder="예) 2학년 3반 김선생" autocomplete="username" /></div>
+          <div class="field"><label for="tPw">비밀번호</label>
+            <input class="text-input plain" id="tPw" type="password" placeholder="비밀번호" autocomplete="current-password" /></div>
+          <div class="field" id="tPw2Wrap" hidden><label for="tPw2">비밀번호 확인</label>
+            <input class="text-input plain" id="tPw2" type="password" placeholder="한 번 더 입력" autocomplete="new-password" /></div>
+          <div class="field" id="tInviteWrap" hidden><label for="tInvite">가입 코드</label>
+            <input class="text-input plain" id="tInvite" type="text" placeholder="관리자 선생님께 받은 코드" autocomplete="off" /></div>
           <button class="btn btn-primary btn-lg" id="tLoginBtn" type="submit">입장하기</button>
           <p class="gate-error" id="tLoginErr" role="alert"></p>
+          <button class="text-btn" id="tSwitch" type="button" hidden>처음이세요? 새 방 만들기 →</button>
           <button class="text-btn" id="tLoginBack" type="button">← 처음으로</button>
         </form>
       </div>
@@ -103,7 +111,7 @@
       <div class="admin-head">
         <div>
           <p class="eyebrow">TEACHER MODE <span class="pill-label test" id="tModeBadge" hidden>부스 모드</span></p>
-          <h1>학생들이 보낸 사진</h1>
+          <h1><span class="room-name" id="tRoomName" hidden></span>학생들이 보낸 사진</h1>
         </div>
         <div class="row-gap">
           <span class="live" id="tLive"><i></i><span id="tLiveText">연결 중</span></span>
@@ -136,6 +144,12 @@
         <div class="stat"><small>인쇄 대기</small><b id="statWait">0</b></div>
         <div class="stat"><small>인쇄 완료</small><b id="statDone">0</b></div>
       </div>
+      <div class="print-bar">
+        <button class="btn btn-primary btn-lg" id="tA4" type="button">🖨 A4로 모아 인쇄</button>
+        <span class="sel-info" id="tSelInfo"></span>
+        <button class="text-btn" id="tSelClear" type="button" hidden>선택 해제</button>
+        <span class="print-tip">사진 왼쪽 위 <b>선택</b>을 눌러 골라도 되고, 안 고르면 '인쇄 대기' 사진을 모아 찍어요.</span>
+      </div>
       <div class="toolbar">
         <div class="tabs" id="tTabs">
           <button class="on" data-filter="all" type="button">전체</button>
@@ -148,6 +162,24 @@
         </div>
       </div>
       <div class="gallery" id="gallery"></div>
+      <div class="modal" id="a4Modal" hidden role="dialog" aria-modal="true" aria-labelledby="a4Title">
+        <div class="card modal-card">
+          <h2 id="a4Title">A4로 모아 인쇄</h2>
+          <p class="modal-sub">실제 크기 그대로 A4 한 장에 여러 개를 배치해요. 점선을 따라 자르면 돼요.</p>
+          <div class="a4-targets">
+            <label><input type="radio" name="a4t" value="selected" /> 선택한 사진 <b>0장</b></label>
+            <label><input type="radio" name="a4t" value="wait" /> 인쇄 대기 사진 모두 <b>0장</b></label>
+            <label><input type="radio" name="a4t" value="visible" /> 지금 화면에 보이는 사진 <b>0장</b></label>
+          </div>
+          <ul class="a4-summary" id="a4Summary"></ul>
+          <label class="switch"><input type="checkbox" id="a4Mark" checked /> 인쇄가 끝나면 '인쇄 완료'로 표시</label>
+          <p class="a4-note">인쇄 창에서 <b>용지: A4</b>, <b>배율: 실제 크기(100%)</b>를 골라 주세요. '페이지에 맞춤'을 고르면 크기가 조금 작아져요.</p>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" id="a4Cancel" type="button">취소</button>
+            <button class="btn btn-pink btn-lg" id="a4Go" type="button">🖨 인쇄하기</button>
+          </div>
+        </div>
+      </div>
       <div class="empty" id="empty" hidden><b>아직 도착한 사진이 없어요</b>학생이 전송하면 몇 초 안에 이 화면에 자동으로 나타나요.</div>
     </section>
 

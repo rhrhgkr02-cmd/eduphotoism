@@ -3,7 +3,7 @@
    - config.js에 Apps Script 주소가 있으면 → 선생님 구글 드라이브에 저장 (실제 운영)
    - 주소가 없으면 → '부스 모드' : 이 기기(브라우저) 안에 저장 → 같은 기기 선생님 모드에서 인쇄
    ========================================================= */
-const SCRIPT_URL = String(window.PHOTOBOOTH_CONFIG?.APPS_SCRIPT_URL || '').trim();
+const SCRIPT_URL = String(window.PHOTOBOOTH_CONFIG?.APPS_SCRIPT_URL || '').trim().replace(/\/+$/, '');
 export const MODE = /^https:\/\/script\.google\.com\/.+\/exec$/.test(SCRIPT_URL) ? 'remote' : 'local';
 export const TEST_PASSWORD = String(window.PHOTOBOOTH_CONFIG?.BOOTH_PASSWORD || '0000');
 const CODE_DAYS = 3;
@@ -26,24 +26,38 @@ async function call(action, data = {}) {
   if (!j.ok) throw fail(j.error || 'SERVER');
   return j;
 }
+/* auth = { room: 방ID, password } — 선생님 기능은 모두 이걸 함께 보냄 */
+const sleepMs = ms => new Promise(r => setTimeout(r, ms));
 const remote = {
   checkCode: code => call('checkCode', { code }),
-  upload: async ({ code, blob, layout, style }) => call('upload', { code, layout, style, image: await blobToDataURL(blob) }),
-  login: pw => call('login', { password: pw }),
-  createCode: pw => call('createCode', { password: pw }),
-  deleteCode: (pw, code) => call('deleteCode', { password: pw, code }),
-  deletePhoto: (pw, id) => call('deletePhoto', { password: pw, id }),
-  async list(pw) {
-    const j = await call('list', { password: pw });
+  async upload({ code, blob, layout, style }) {
+    const image = await blobToDataURL(blob);
+    let last;
+    for (let i = 0; i < 3; i++) {                     // 사람이 몰려 실패하면 자동으로 다시 시도
+      try { return await call('upload', { code, layout, style, image }); }
+      catch (e) { last = e; if (['BAD_CODE', 'BAD_IMAGE'].includes(e.code)) throw e; await sleepMs(1500 * (i + 1)); }
+    }
+    throw last;
+  },
+  createRoom: (name, password, invite) => call('createRoom', { name, password, invite }),
+  login: ({ name, password }) => call('login', { name, password }),
+  createCode: auth => call('createCode', auth),
+  deleteCode: (auth, code) => call('deleteCode', { ...auth, code }),
+  deletePhoto: (auth, id) => call('deletePhoto', { ...auth, id }),
+  setPrinted: (auth, id, printed) => call('setPrinted', { ...auth, id, printed }),
+  setPrintedMany: (auth, ids, printed) => call('setPrintedMany', { ...auth, ids, printed }),
+  async list(auth, since) {
+    const j = await call('list', { ...auth, since });
+    if (j.same) return j;
     j.items.forEach(it => {
-      it.thumb = `https://drive.google.com/thumbnail?id=${encodeURIComponent(it.id)}&sz=w800`;
-      it.full = `https://drive.google.com/thumbnail?id=${encodeURIComponent(it.id)}&sz=w2400`;
-      it.download = `https://drive.google.com/uc?export=download&id=${encodeURIComponent(it.id)}`;
-      it.open = `https://drive.google.com/file/d/${encodeURIComponent(it.id)}/view`;
+      const id = encodeURIComponent(it.id);
+      it.thumb = `https://drive.google.com/thumbnail?id=${id}&sz=w800`;
+      it.full = `https://drive.google.com/thumbnail?id=${id}&sz=w2400`;
+      it.download = `https://drive.google.com/uc?export=download&id=${id}`;
+      it.open = `https://drive.google.com/file/d/${id}/view`;
     });
     return j;
-  },
-  setPrinted: (pw, id, printed) => call('setPrinted', { password: pw, id, printed })
+  }
 };
 
 /* ---------- 2. 부스 모드: 이 기기 안에 저장 (IndexedDB) ---------- */
@@ -87,7 +101,8 @@ const localCodes = () => {
   return list.sort((a, b) => b.createdAt - a.createdAt);
 };
 const saveCodes = list => { ls.set('pb_test_codes', list); ls.del('pb_test_active'); };
-const checkPw = pw => { if (pw !== TEST_PASSWORD) throw fail('WRONG_PASSWORD'); };
+const checkPw = a => { const pw = typeof a === 'object' && a ? a.password : a; if (pw !== TEST_PASSWORD) throw fail('WRONG_PASSWORD'); };
+const LOCAL_ROOM = { id: 'local', name: '이 기기' };
 const MAX_CODES = 10;
 const local = {
   async checkCode(code) { const c = localCodes().find(c => c.code === String(code)); if (!c) throw fail('BAD_CODE'); return { ok: true, expiresAt: c.expiresAt }; },
@@ -97,7 +112,7 @@ const local = {
     await store.put({ id, blob, created: Date.now(), code: String(code), layout, style, printed: false });
     return { ok: true, id };
   },
-  async login(pw) { checkPw(pw); return { ok: true, codes: localCodes() }; },
+  async login({ password }) { checkPw(password); return { ok: true, room: LOCAL_ROOM, codes: localCodes() }; },
   async createCode(pw) {
     checkPw(pw);
     const list = localCodes();
@@ -114,12 +129,17 @@ const local = {
       const u = urlCache.get(p.id);
       return { id: p.id, created: p.created, code: p.code, layout: p.layout, style: p.style, printed: p.printed, thumb: u, full: u, download: u, open: u, local: true };
     });
-    return { ok: true, codes: localCodes(), items };
+    return { ok: true, room: LOCAL_ROOM, codes: localCodes(), items };
   },
   async setPrinted(pw, id, printed) {
     checkPw(pw);
     const p = (await store.all()).find(x => x.id === id); if (!p) throw fail('NOT_FOUND');
     p.printed = !!printed; await store.put(p); return { ok: true };
+  },
+  async setPrintedMany(pw, ids, printed) {
+    checkPw(pw);
+    for (const p of await store.all()) if (ids.includes(p.id)) { p.printed = !!printed; await store.put(p); }
+    return { ok: true };
   },
   async deletePhoto(pw, id) {
     checkPw(pw); await store.del(id);
@@ -134,7 +154,13 @@ export const backend = MODE === 'remote' ? remote : local;
 export function errorText(err) {
   switch (err && err.code) {
     case 'BAD_CODE': return '코드가 맞지 않거나 사용 기간이 끝났어요. 선생님께 다시 확인해 주세요.';
-    case 'WRONG_PASSWORD': return '비밀번호가 맞지 않아요.';
+    case 'WRONG_PASSWORD': return MODE === 'remote' ? '방 이름이나 비밀번호가 맞지 않아요.' : '비밀번호가 맞지 않아요.';
+    case 'BAD_INVITE': return '가입 코드가 맞지 않아요. 관리자 선생님께 확인해 주세요.';
+    case 'ROOM_EXISTS': return '이미 있는 방 이름이에요. 다른 이름을 써 주세요. (내 방이면 [입장하기]로)';
+    case 'BAD_ROOM_NAME': return '방 이름은 2~30글자로 정해 주세요.';
+    case 'WEAK_PASSWORD': return '비밀번호는 4자 이상으로 정해 주세요.';
+    case 'BUSY': return '사용자가 많아 잠시 바빠요. 몇 초 뒤 다시 눌러 주세요.';
+    case 'NOT_SETUP': return '서버 준비가 아직 안 됐어요. 관리자 선생님께 알려 주세요. (setup 실행 필요)';
     case 'NETWORK': return '인터넷 연결을 확인해 주세요. (와이파이)';
     case 'BAD_IMAGE': return '사진 파일에 문제가 있어요. 다시 시도해 주세요.';
     case 'TOO_MANY_CODES': return '코드는 최대 10개까지 만들 수 있어요. 안 쓰는 코드를 삭제해 주세요.';

@@ -14,6 +14,7 @@ const SHOTS_PER_SET = 8;     // 한 세트 촬영 장수
 const COUNTDOWN_SEC = 8;     // 컷마다 카운트다운(초)
 const EXPORT_SCALE = 1;      // 최종 PNG 배율 (1 = 300dpi 인쇄 품질. 2로 올리면 더 선명하지만 전송이 느려짐)
 const MAX_CAPTURE_SIDE = 1920;
+const JPEG_QUALITY = 0.93;   // 서버로 보낼 때 JPG 품질 (0.9~0.95 권장)
 
 /* ---------- 1. 레이아웃 정의 (단위: 300dpi 기준 px) ----------
    slots 배열의 순서 = 학생이 클릭한 순서가 들어가는 순서
@@ -1021,7 +1022,8 @@ async function enterSend() {
   await Promise.all([BASE_FONTS_READY, ensureFont(f.id, f.weight, state.deco.text || '가')]);
   const L = layout(), c = document.createElement('canvas');
   renderFrame(c, { L, scale: EXPORT_SCALE, photos: slotPhotos(), adjust: state.adjust, deco: state.deco, stickers: state.stickers });
-  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  // 휴대폰 모드(서버 전송): 고화질 JPG → 용량 약 1/5, 인쇄 품질은 거의 같음 / 부스 모드: PNG
+  const blob = await new Promise(r => (MODE === 'remote' ? c.toBlob(r, 'image/jpeg', JPEG_QUALITY) : c.toBlob(r, 'image/png')));
   c.width = c.height = 0;
   if (state.finalUrl) URL.revokeObjectURL(state.finalUrl);
   state.finalBlob = blob; state.finalUrl = URL.createObjectURL(blob);
